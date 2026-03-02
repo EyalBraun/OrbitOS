@@ -1,47 +1,41 @@
 #include <iostream>
 #include <string>
-#include <fstream>
 #include <vector>
+#include <memory>
+#include <sstream>
 #include "../Headers/Commands.h"
-#define ("sifu",hello);
+
 using namespace std;
 
+int main() {
+    build_commands();
 
+    auto root = make_unique<node>("root", true, nullptr);
+    node* current = root.get();
 
+    string owner;
+    cout << "Owner Name: ";
+    cin >> owner;
+    cin.ignore();
 
+    while (true) {
+        cout << owner << "@OS:";
+        pwd(current);
+        cout << "$ ";
 
+        string input;
+        getline(cin, input);
+        if (input == "exit") break;
+        if (input.empty()) continue;
 
+        stringstream ss(input);
+        string cmd;
+        ss >> cmd;
+        vector<string> args;
+        string a;
+        while (ss >> a) args.push_back(a);
 
-void base_display(string name,string dir){
-  cout<<name<<":"<<dir<<endl;
-
-}
-int main(){
-  build_commands();
-  
-  string name; cout<<"Whats the Owner Name ? : "; cin >> name;
-  string dir = "root";
-  
-   while(true){
-        base_display(name,dir);
-    cout<<hello<<endl;
-
-
-        
-
-      
-
-
-        
+        compile_commands(cmd, current, args);
     }
-  return 0;
-    
-  }
-  
-
-
-   
-
-
-
-  
+    return 0;
+}
