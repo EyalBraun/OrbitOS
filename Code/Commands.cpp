@@ -250,4 +250,110 @@ void handle_sf(File*& current, const vector<string>& args){
 
 
  }
+// Global variables to track system metrics
+int amount_of_files = 0;   // Counter for total nodes (files/dirs)
+int deepest_file = -1;     // Tracks the maximum depth reached in the tree
+int current_depth = 0;     // Current depth during recursion
+
+/**
+ * Recursive function to traverse the file system tree.
+ * Updates global statistics for node count and maximum depth.
+ */
+void stats(File* current) {
+    // Increment the total node count
+    amount_of_files++;
+    
+    // Update deepest_file if the current path is deeper than previous records
+    if (current_depth > deepest_file) {
+        deepest_file = current_depth;
+    }
+
+    // Iterate through all children using raw pointers (non-owning access)
+    for (auto &child : current->children) {
+        current_depth++;    // Descend to the next level
+        stats(child.get()); // Recursive call
+        current_depth--;    // Backtrack to the parent level
+    }
+}
+
+/**
+ * Command handler for the 'stats' command.
+ * Validates state and initiates the recursive count.
+ */
+void handle_stats(File*& current, const vector<string>& args) {
+    // Ensuring stats are calculated from the root for a full system overview
+    if (current->parent != nullptr) {
+        cout << "Error: Stats can only be calculated from root. Type 'cd root' first." << endl;
+        return;
+    }
+
+    // Reset global metrics before starting the calculation
+    amount_of_files = 0;
+    deepest_file = 0;
+    current_depth = 0;
+
+    // Execute the recursive traversal
+    stats(current); 
+
+    // Output the final results once the entire tree has been processed
+    cout << "--- OrbitOS System Statistics ---" << endl;
+    cout << "Total Nodes:   " << amount_of_files << endl;
+    cout << "Maximum Depth: " << deepest_file << " levels" << endl;
+    cout << "---------------------------------" << endl;
+}
+
+// Global vector to store names of favorite files
+vector<string> FavFiles;
+
+/**
+ * Recursively traverses the tree and collects names of files 
+ * marked as favorites (isFav == true).
+ */
+void showfv(File *current) {
+    // If the current file is marked as favorite, add its name to the list
+    if (current->isFav) {
+        FavFiles.push_back(current->name);
+    }
+
+    // Base case: if no children, stop recursion for this branch
+    if (current->children.empty()) return;
+
+    // Recursive step: visit all children
+    for (auto &child : current->children) {
+        showfv(child.get());
+    }
+}
+
+/**
+ * Handler for the 'showfv' command.
+ * Ensures the search starts from the root and displays the collected favorites.
+ */
+void handle_showfv(File *&current, const vector<string> &args) {
+    // Security check: ensure we are at the root for a global search
+    if (current->parent != nullptr) {
+        cout << "Error: cannot use command showfv when not at the root directory." << endl;
+        cout << "To go to the root directory use: cd root" << endl;
+        return;
+    }
+
+    // CRITICAL: Clear the previous results before starting a new search
+    FavFiles.clear();
+
+    // Start the recursive search
+    showfv(current);
+
+    // Display the results
+    if (FavFiles.empty()) {
+        cout << "No favorite files found in the system." << endl;
+    } else {
+        cout << "Total favorite files found: " << FavFiles.size() << endl;
+        cout << "-------------------------------" << endl;
+        for (const string &s : FavFiles) {
+            cout << "- " << s << endl;
+        }
+    }
+}
+
+  
+
 

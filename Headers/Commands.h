@@ -17,6 +17,8 @@
     X(tree)          \
     X(wtf)           \
     X(sf)            \
+    X(stats)         \
+    X(showfv)        \
 
 // Update typedef to use File*
 typedef void (*CommandFunc)(File*& current, const std::vector<std::string>& args);
