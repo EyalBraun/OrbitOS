@@ -8,30 +8,58 @@
 
 using namespace std;
 
+// --- Globals ---
 string commands[64];
-void (*cmds_defs[64])(File*&, const vector<string>&);
+void (*cmds_defs[64])(File*&, const vector<string>&) = {nullptr};
 
-// --- Initialization ---
-void build_commands() {
-    #define X(name) \
-        int idx_##name = get_idx(#name); \
-        cmds_defs[idx_##name] = handle_##name; \
-        commands[idx_##name] = #name;
-    COMMAND_LIST
-    #undef X
+// --- Logic & Helpers ---
+
+int get_idx(string s) {
+    if (s.empty()) return -1;
+    // פונקציית ה-Hash החדשה שלך
+    return (unsigned((s[0] * 31) ^ (s[s.size() - 1] * 91) ^ (s.size() * 13))) % 64;
 }
 
-// --- Recursive Helpers ---
+File* find_child(File* current, const string& name) {
+    for (auto const& child : current->children) 
+        if (child->name == name) return child.get();
+    return nullptr;
+}
+
+void pwd_rec(File* current) {
+    if (!current) return;
+    if (current->parent) pwd_rec(current->parent);
+    cout << (current->name == "/" ? "/" : current->name + "/");
+}
+
+size_t get_total_size(File* node) {
+    if (!node) return 0;
+    size_t total = node->Content.size();
+    for (auto const& child : node->children) {
+        total += get_total_size(child.get());
+    }
+    return total;
+}
+
+unique_ptr<File> clone_node(File* source, File* new_parent) {
+    auto newNode = make_unique<File>(source->name, source->isDir, source->isFav, new_parent, source->Content);
+    for (auto const& child : source->children) 
+        newNode->children.push_back(clone_node(child.get(), newNode.get()));
+    return newNode;
+}
+
+// --- Persistence ---
+
 void save_recursive(File* node, ofstream& out) {
     if (!node) return;
-    size_t nameLen = node->name.size(), contentLen = node->Content.size(), childCount = node->children.size();
-    out.write((char*)&nameLen, sizeof(nameLen));
-    out.write(node->name.c_str(), nameLen);
+    size_t nLen = node->name.size(), cLen = node->Content.size(), cCount = node->children.size();
+    out.write((char*)&nLen, sizeof(nLen));
+    out.write(node->name.c_str(), nLen);
     out.write((char*)&node->isDir, sizeof(node->isDir));
     out.write((char*)&node->isFav, sizeof(node->isFav));
-    out.write((char*)&contentLen, sizeof(contentLen));
-    out.write(node->Content.c_str(), contentLen);
-    out.write((char*)&childCount, sizeof(childCount));
+    out.write((char*)&cLen, sizeof(cLen));
+    out.write(node->Content.c_str(), cLen);
+    out.write((char*)&cCount, sizeof(cCount));
     for (auto const& child : node->children) save_recursive(child.get(), out);
 }
 
@@ -44,7 +72,7 @@ unique_ptr<File> load_recursive(ifstream& in, File* parent) {
     in.read((char*)&cLen, sizeof(cLen));
     string content(cLen, ' '); if (cLen > 0) in.read(&content[0], cLen);
     auto newNode = make_unique<File>(name, d, f, parent, content);
-    in.read((char*)&cCount, sizeof(cCount));
+    if (!in.read((char*)&cCount, sizeof(cCount))) return newNode;
     for (size_t i = 0; i < cCount; ++i) {
         auto child = load_recursive(in, newNode.get());
         if (child) newNode->children.push_back(move(child));
@@ -52,30 +80,8 @@ unique_ptr<File> load_recursive(ifstream& in, File* parent) {
     return newNode;
 }
 
-unique_ptr<File> clone_node(File* source, File* new_parent) {
-    auto newNode = make_unique<File>(source->name, source->isDir, source->isFav, new_parent, source->Content);
-    for (auto const& child : source->children) newNode->children.push_back(clone_node(child.get(), newNode.get()));
-    return newNode;
-}
+// --- Command Handlers ---
 
-// --- Logic ---
-File* find_child(File* current, const string& name) {
-    for (auto const& child : current->children) if (child->name == name) return child.get();
-    return nullptr;
-}
-
-int get_idx(string s) {
-    if (s.empty()) return -1;
-    return (unsigned(s[0] * 31 + s[s.size() - 1])) % 64;
-}
-
-void pwd(File* current) {
-    if (!current) return;
-    if (current->parent) pwd(current->parent);
-    cout << (current->name == "/" ? "/" : current->name + "/");
-}
-
-// --- Handlers (Implementation of the macros in header) ---
 void handle_help(File*& current, const vector<string>& args) {
     cout << "OrbitOS Commands: ";
     for (int i = 0; i < 64; i++) if (!commands[i].empty()) cout << commands[i] << " ";
@@ -83,7 +89,8 @@ void handle_help(File*& current, const vector<string>& args) {
 }
 
 void handle_ls(File*& current, const vector<string>& args) {
-    for (auto const& c : current->children) cout << (c->isFav ? "[*]" : "") << c->name << (c->isDir ? "/" : "") << "  ";
+    for (auto const& c : current->children) 
+        cout << (c->isFav ? "[*]" : "") << c->name << (c->isDir ? "/" : "") << "  ";
     cout << endl;
 }
 
@@ -114,6 +121,14 @@ void handle_cd(File*& current, const vector<string>& args) {
         }
     }
     current = target;
+}
+
+void handle_fs(File*& current, const vector<string>& args) {
+    if (args.empty()) { cout << "Error: needed a file name!" << endl; return; }
+    File* target = find_child(current, args[0]);
+    if (target) {
+        cout << "File: " << target->name << " | Rec. Size: " << get_total_size(target) << " bytes" << endl;
+    } else cout << "fs: cannot find " << args[0] << endl;
 }
 
 void handle_save(File*& current, const vector<string>& args) {
@@ -149,7 +164,10 @@ void handle_tree(File*& current, const vector<string>& args) {
 void handle_wtf(File*& current, const vector<string>& args) {
     if (args.empty()) return;
     File* target = find_child(current, args[0]);
-    if (!target) { current->children.push_back(make_unique<File>(args[0], false, false, current)); target = current->children.back().get(); }
+    if (!target) { 
+        current->children.push_back(make_unique<File>(args[0], false, false, current)); 
+        target = current->children.back().get(); 
+    }
     cout << "Recording (q to stop):" << endl;
     string buf; char c; while (cin.get(c) && c != 'q') buf += c;
     cin.ignore(1000, '\n'); target->Content = buf;
@@ -163,7 +181,8 @@ void handle_sf(File*& current, const vector<string>& args) {
 
 void handle_rm(File*& current, const vector<string>& args) {
     if (args.empty()) return;
-    auto it = find_if(current->children.begin(), current->children.end(), [&](const unique_ptr<File>& f){ return f->name == args.back(); });
+    auto it = find_if(current->children.begin(), current->children.end(), 
+        [&](const unique_ptr<File>& f){ return f->name == args.back(); });
     if (it != current->children.end() && !(*it)->isFav) current->children.erase(it);
 }
 
@@ -181,7 +200,10 @@ void handle_fv(File*& current, const vector<string>& args) {
 }
 
 void handle_showfv(File*& current, const vector<string>& args) {
-    auto rec = [&](auto self, File* n) -> void { if(n->isFav) cout << n->name << endl; for(auto &c : n->children) self(self, c.get()); };
+    auto rec = [&](auto self, File* n) -> void { 
+        if(n->isFav) cout << "[*] " << n->name << endl; 
+        for(auto &c : n->children) self(self, c.get()); 
+    };
     File* r = current; while(r->parent) r = r->parent;
     rec(rec, r);
 }
@@ -198,15 +220,35 @@ void handle_cp(File*& current, const vector<string>& args) {
 
 void handle_find(File*& current, const vector<string>& args) {
     if (args.empty()) return;
-    auto rec = [&](auto self, File* n) -> void { if(n->name == args[0]) { pwd(n); cout << endl; } for(auto &c : n->children) self(self, c.get()); };
+    auto rec = [&](auto self, File* n) -> void { 
+        if(n->name == args[0]) { pwd_rec(n); cout << endl; } 
+        for(auto &c : n->children) self(self, c.get()); 
+    };
     File* r = current; while(r->parent) r = r->parent;
     rec(rec, r);
 }
 
-void handle_pwd(File*& current, const vector<string>& args) { pwd(current); cout << endl; }
+void handle_pwd(File*& current, const vector<string>& args) { pwd_rec(current); cout << endl; }
+
+// --- Infrastructure ---
+
+void build_commands() {
+    #define X(name) \
+        { int idx = get_idx(#name); \
+          cmds_defs[idx] = handle_##name; \
+          commands[idx] = #name; }
+    COMMAND_LIST
+    #undef X
+}
 
 void compile_commands(string s, File*& current, vector<string> args) {
     int idx = get_idx(s);
-    if (idx != -1 && cmds_defs[idx]) cmds_defs[idx](current, args);
-    else cout << s << ": command not found" << endl;
+    if (idx != -1 && commands[idx] == s && cmds_defs[idx]) {
+        cmds_defs[idx](current, args);
+    } else {
+        cout << s << ": command not found" << endl;
+    }
+}
+void pwd(File* current) {
+    pwd_rec(current);
 }

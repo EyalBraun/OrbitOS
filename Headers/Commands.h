@@ -10,7 +10,8 @@
     X(cd)     X(save)  X(load)  \
     X(tree)   X(wtf)   X(sf)    \
     X(stats)  X(rm)    X(fv)    \
-    X(pwd)    X(find)  X(showfv) X(cp)
+    X(pwd)    X(find)  X(showfv) X(cp) \
+    X(fs)
 
 // Global jump tables
 extern std::string commands[64];
