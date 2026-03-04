@@ -38,7 +38,7 @@ int main() {
         bool found_cmd = false;
 
         for (int i = 0; i < input.size(); i++) {
-            if (input[i] != ' ') {
+            if (input[i] != ' ' && input[i] != '/') {
                 word += input[i];
             } else if (!word.empty()) {
                 if (!found_cmd) {
