@@ -5,18 +5,49 @@
 #include <memory>
 #include <fstream>
 #include <algorithm>
+#include <limits>
+
+using namespace std;
+
+#include "../Headers/Commands.h"
+#include <iostream>
+#include <vector>
+#include <string>
+#include <memory>
+#include <fstream>
+#include <algorithm>
+#include <limits>
 
 using namespace std;
 
 // --- Globals ---
 string commands[64];
 void (*cmds_defs[64])(File*&, const vector<string>&) = {nullptr};
+vector<string> PATHS; // Global storage for search results
 
 // --- Logic & Helpers ---
 
+/**
+ * Converts a File pointer into a full path string (e.g., /root/folder/file)
+ */
+string get_path_string(File* current) {
+    if (!current) return "";
+    if (current->parent == nullptr) return "/";
+
+    string full_path = "";
+    File* temp = current;
+    while (temp != nullptr && temp->parent != nullptr) {
+        full_path = "/" + temp->name + full_path;
+        temp = temp->parent;
+    }
+    return full_path;
+}
+
+/**
+ * Custom Hash function for command mapping
+ */
 int get_idx(string s) {
     if (s.empty()) return -1;
-    // פונקציית ה-Hash החדשה שלך
     return (unsigned((s[0] * 31) ^ (s[s.size() - 1] * 91) ^ (s.size() * 13))) % 64;
 }
 
@@ -48,7 +79,7 @@ unique_ptr<File> clone_node(File* source, File* new_parent) {
     return newNode;
 }
 
-// --- Persistence ---
+// --- Persistence (Binary Save/Load) ---
 
 void save_recursive(File* node, ofstream& out) {
     if (!node) return;
@@ -124,7 +155,7 @@ void handle_cd(File*& current, const vector<string>& args) {
 }
 
 void handle_fs(File*& current, const vector<string>& args) {
-    if (args.empty()) { cout << "Error: needed a file name!" << endl; return; }
+    if (args.empty()) { cout << "Error: file name required!" << endl; return; }
     File* target = find_child(current, args[0]);
     if (target) {
         cout << "File: " << target->name << " | Rec. Size: " << get_total_size(target) << " bytes" << endl;
@@ -170,7 +201,7 @@ void handle_wtf(File*& current, const vector<string>& args) {
     }
     cout << "Recording (q to stop):" << endl;
     string buf; char c; while (cin.get(c) && c != 'q') buf += c;
-    cin.ignore(1000, '\n'); target->Content = buf;
+    cin.ignore(numeric_limits<streamsize>::max(), '\n'); target->Content = buf;
 }
 
 void handle_sf(File*& current, const vector<string>& args) {
@@ -201,7 +232,7 @@ void handle_fv(File*& current, const vector<string>& args) {
 
 void handle_showfv(File*& current, const vector<string>& args) {
     auto rec = [&](auto self, File* n) -> void { 
-        if(n->isFav) cout << "[*] " << n->name << endl; 
+        if(n->isFav) cout << "[*] " << n->name << " (Path: " << get_path_string(n) << ")" << endl; 
         for(auto &c : n->children) self(self, c.get()); 
     };
     File* r = current; while(r->parent) r = r->parent;
@@ -221,11 +252,59 @@ void handle_cp(File*& current, const vector<string>& args) {
 void handle_find(File*& current, const vector<string>& args) {
     if (args.empty()) return;
     auto rec = [&](auto self, File* n) -> void { 
-        if(n->name == args[0]) { pwd_rec(n); cout << endl; } 
+        if(n->name == args[0]) { cout << "Found: " << get_path_string(n) << endl; } 
         for(auto &c : n->children) self(self, c.get()); 
     };
     File* r = current; while(r->parent) r = r->parent;
     rec(rec, r);
+}
+
+/**
+ * FIXED fc_rec: Recursive search for exact file content.
+ * Changed return type to void and added recursive loop.
+ */
+void fc_rec(File* node, const string& content) {
+    if (node == nullptr) return;
+
+    // Only compare content if it is a file (not a directory)
+    if (!node->isDir && node->Content == content) {
+        PATHS.push_back(get_path_string(node));
+    }
+
+    // Recursively check all children
+    for (auto const& child : node->children) {
+        fc_rec(child.get(), content);
+    }
+}
+
+/**
+ * handle_fc: Find Content
+ */
+void handle_fc(File*& current, const vector<string>& args) {
+    cout << "Recording content to search (q to stop):" << endl;
+    string buf; char c; 
+    while (cin.get(c) && c != 'q') buf += c;
+    
+    // Clear input buffer properly
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
+    if(buf.empty()){
+        cout << "Search cancelled or empty." << endl;
+        return;
+    }
+
+    PATHS.clear(); // Clear previous results
+    File* root = current;
+    while(root->parent) root = root->parent; // Search globally from root
+
+    fc_rec(root, buf);
+
+    if (PATHS.empty()) {
+        cout << "No matching files found." << endl;
+    } else {
+        cout << "Found content in " << PATHS.size() << " files:" << endl;
+        for (const auto& p : PATHS) cout << " -> " << p << endl;
+    }
 }
 
 void handle_pwd(File*& current, const vector<string>& args) { pwd_rec(current); cout << endl; }
@@ -249,6 +328,7 @@ void compile_commands(string s, File*& current, vector<string> args) {
         cout << s << ": command not found" << endl;
     }
 }
+
 void pwd(File* current) {
     pwd_rec(current);
 }
