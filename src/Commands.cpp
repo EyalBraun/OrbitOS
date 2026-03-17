@@ -15,6 +15,7 @@ using namespace std;
 string commands[64];
 string command_descs[64];
 void (*cmds_defs[64])(File*&, const vector<string>&) = {nullptr};
+extern vector <string> cmdHistory;
 vector<string> PATHS; 
 
 // --- Logic & Helpers ---
@@ -45,9 +46,49 @@ File* find_child(File* current, const string& name) {
 
 void pwd_rec(File* current) {
     if (!current) return;
-    if (current->parent) pwd_rec(current->parent);
-    cout << (current->name == "/" ? "/" : current->name + "/");
+
+    // 1. Recurse up to the root first
+    if (current->parent) {
+        pwd_rec(current->parent);
+    }
+
+    // 2. Print the current name
+    if (current->name == "/") {
+        cout << "/"; 
+    } else {
+        // Only add the trailing slash if it's not the root
+        cout << current->name << "/";
+    }
 }
+void handle_history(File*& current, const std::vector<std::string>& args) {
+    if (cmdHistory.empty()) return;
+
+    int count = 1;
+    std::string last = cmdHistory[0];
+
+    // Start loop from 1
+    for (size_t i = 1; i < cmdHistory.size(); i++) {
+        if (cmdHistory[i] == last) {
+            count++;
+        } else {
+            // Print the 'last' command and its count
+            if (count > 1) cout << last << " [X" << count << "]" << endl;
+            else cout << last << endl;
+            
+            // Reset for the new command
+            last = cmdHistory[i];
+            count = 1;
+        }
+    }
+
+    // CRITICAL: Print the very last group after the loop ends
+    if (count > 1) cout << last << " [X" << count << "]" << endl;
+    else cout << last << endl;
+}
+
+	
+
+
 
 size_t get_total_size(File* node) {
     if (!node) return 0;

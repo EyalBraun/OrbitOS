@@ -25,7 +25,9 @@
     X(cp, "Copy a node") \
     X(fs, "Show recursive node size") \
     X(fc, "Search files by content")   \
-		X(exc, "excucte the .orbit file") 
+	X(exc, "excucte the .orbit file") \
+    X(history,"shows the history of user inputs.")
+    
 
 // Global jump tables
 extern std::string commands[64];

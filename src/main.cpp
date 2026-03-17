@@ -5,14 +5,14 @@
 #include <iostream>
 
 using namespace std;
-
+vector <string> cmdHistory;
 int main() {
     build_commands();
     build_orb_commands();
        
   OrbitManager orbit;
     string owner;
-
+   
     cout << "------------------------------------------" << endl;
     cout << "    ORBIT OS v1.0 | Real-Time Subsystem    " << endl;
     cout << "------------------------------------------" << endl;
@@ -42,6 +42,7 @@ int main() {
         }
         if (!word.empty()) { if (!found_cmd) cmd = word; else args.push_back(word); }
         if (!cmd.empty()) compile_commands(cmd, orbit.current, args);
+        cmdHistory.push_back(input);
     }
     return 0;
 }
